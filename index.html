@@ -71,6 +71,7 @@
   <!-- Menú -->
   <div id="menu">
     <input type="file" id="videoInput" accept="video/*">
+    <button id="nodeCountButton">Set Nodos</button>
     <button id="addNodeButton">Agregar Nodo</button>
     <button id="deleteNodeButton">Eliminar Nodo</button>
     <button id="playPauseButton">Play</button>
@@ -87,35 +88,49 @@
     const menuIcon = document.getElementById('menuIcon');
     const menu = document.getElementById('menu');
     const videoInput = document.getElementById('videoInput');
+    const nodeCountButton = document.getElementById('nodeCountButton');
     const addNodeButton = document.getElementById('addNodeButton');
     const deleteNodeButton = document.getElementById('deleteNodeButton');
     const resetButton = document.getElementById('resetButton');
     const playPauseButton = document.getElementById('playPauseButton');
     const fullScreenButton = document.getElementById('fullScreenButton');
 
-    let maskPoints = [
-      { x: 100, y: 100 },
-      { x: window.innerWidth - 100, y: 100 },
-      { x: window.innerWidth - 100, y: window.innerHeight - 100 },
-      { x: 100, y: window.innerHeight - 100 }
-    ];
+    let maskPoints = [];
     let selectedPoint = null;
     let isDragging = false;
     let video = null;
     let isPlaying = false;
     let externalWindow = null;
 
+    // Crear máscara inicial con n lados
+    function createPolygonVertices(n) {
+      const radius = Math.min(maskCanvas.width, maskCanvas.height) / 3;
+      const centerX = maskCanvas.width / 2;
+      const centerY = maskCanvas.height / 2;
+      const angleStep = (2 * Math.PI) / n;
+      const vertices = [];
+
+      for (let i = 0; i < n; i++) {
+        vertices.push({
+          x: centerX + radius * Math.cos(i * angleStep),
+          y: centerY + radius * Math.sin(i * angleStep),
+        });
+      }
+
+      return vertices;
+    }
+
+    function setInitialMaskNodes(n = 4) {
+      maskPoints = createPolygonVertices(n);
+    }
+
     // Redimensionar Canvas y Adaptar al Giro de Pantalla
     function resizeCanvas() {
       maskCanvas.width = window.innerWidth;
       maskCanvas.height = window.innerHeight;
-      maskPoints = [
-        { x: 100, y: 100 },
-        { x: maskCanvas.width - 100, y: 100 },
-        { x: maskCanvas.width - 100, y: maskCanvas.height - 100 },
-        { x: 100, y: maskCanvas.height - 100 }
-      ];
+      setInitialMaskNodes(maskPoints.length || 4);
     }
+
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
@@ -168,65 +183,12 @@
       requestAnimationFrame(drawMask);
     }
 
-    function openExternalDisplay() {
-      if (externalWindow && !externalWindow.closed) {
-        externalWindow.focus();
+    nodeCountButton.addEventListener('click', () => {
+      const nodeCount = parseInt(prompt("¿Cuántos nodos quieres?", maskPoints.length || 4));
+      if (nodeCount > 2) {
+        setInitialMaskNodes(nodeCount);
       } else {
-        externalWindow = window.open("", "External Display", "width=800,height=600");
-        if (externalWindow) {
-          externalWindow.document.body.style.margin = "0";
-          externalWindow.document.body.style.background = "black";
-
-          const externalCanvas = externalWindow.document.createElement("canvas");
-          externalCanvas.style.width = "100vw";
-          externalCanvas.style.height = "100vh";
-          externalCanvas.width = window.innerWidth;
-          externalCanvas.height = window.innerHeight;
-          externalWindow.document.body.appendChild(externalCanvas);
-
-          const externalCtx = externalCanvas.getContext("2d");
-
-          function drawToExternalCanvas() {
-            externalCtx.clearRect(0, 0, externalCanvas.width, externalCanvas.height);
-
-            if (video) {
-              externalCtx.save();
-              externalCtx.beginPath();
-              externalCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-              for (let i = 1; i < maskPoints.length; i++) {
-                externalCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
-              }
-              externalCtx.closePath();
-              externalCtx.clip();
-              externalCtx.drawImage(video, 0, 0, externalCanvas.width, externalCanvas.height);
-              externalCtx.restore();
-            }
-
-            externalCtx.strokeStyle = "white";
-            externalCtx.lineWidth = 2;
-            externalCtx.beginPath();
-            externalCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-            for (let i = 1; i < maskPoints.length; i++) {
-              externalCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
-            }
-            externalCtx.closePath();
-            externalCtx.stroke();
-
-            requestAnimationFrame(drawToExternalCanvas);
-          }
-
-          drawToExternalCanvas();
-        }
-      }
-    }
-
-    // Detecta si una pantalla externa está conectada
-    window.addEventListener("resize", () => {
-      if (window.screen.availWidth > window.innerWidth) {
-        openExternalDisplay();
-      } else if (externalWindow) {
-        externalWindow.close();
-        externalWindow = null;
+        alert("El número de nodos debe ser mayor a 2.");
       }
     });
 
@@ -306,19 +268,8 @@
     });
 
     resetButton.addEventListener('click', () => {
-      maskPoints = [
-        { x: 100, y: 100 },
-        { x: window.innerWidth - 100, y: 100 },
-        { x: window.innerWidth - 100, y: window.innerHeight - 100 },
-        { x: 100, y: window.innerHeight - 100 }
-      ];
+      setInitialMaskNodes(maskPoints.length || 4);
       selectedPoint = null;
-    });
-
-    // Menú Ocultable
-    menuIcon.addEventListener('click', () => {
-      menu.classList.toggle('visible');
-      openExternalDisplay();
     });
 
     drawMask();
