@@ -75,6 +75,7 @@
     <button id="deleteNodeButton">Eliminar Nodo</button>
     <button id="playPauseButton">Play</button>
     <button id="resetButton">Resetear Máscara</button>
+    <button id="fullScreenButton">Pantalla Completa</button>
   </div>
 
   <!-- Canvas -->
@@ -90,6 +91,7 @@
     const deleteNodeButton = document.getElementById('deleteNodeButton');
     const resetButton = document.getElementById('resetButton');
     const playPauseButton = document.getElementById('playPauseButton');
+    const fullScreenButton = document.getElementById('fullScreenButton');
 
     let maskPoints = [
       { x: 100, y: 100 },
@@ -125,7 +127,8 @@
         document.documentElement.requestFullscreen();
       }
     }
-    document.addEventListener('dblclick', enterFullScreen);
+
+    fullScreenButton.addEventListener('click', enterFullScreen);
 
     // Dibujar máscara y video
     function drawMask() {
