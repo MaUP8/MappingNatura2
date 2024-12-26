@@ -1,279 +1,238 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Mapping con Nodos</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-      touch-action: none; /* Evita comportamientos táctiles predeterminados */
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      touch-action: none;
-    }
-    #menuIcon {
-      position: absolute;
-      bottom: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.7);
-      color: white;
-      font-size: 1.5em;
-      padding: 10px;
-      border-radius: 50%;
-      cursor: pointer;
-      z-index: 3;
-    }
-    #menu {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 10px;
-      transform: translateY(100%);
-      transition: transform 0.3s;
-      z-index: 2;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-around;
-    }
-    #menu.visible {
-      transform: translateY(0);
-    }
-    input, button {
-      margin: 5px;
-      padding: 10px;
-      font-size: 1em;
-      width: 45%;
-      text-align: center;
-      border: none;
-      border-radius: 5px;
-      background: #333;
-      color: white;
-      cursor: pointer;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Mapping Tool</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 1px solid #fff;
+            background-color: #000;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        .controls input {
+            margin: 5px;
+        }
+        .layer-list {
+            margin-top: 10px;
+            list-style: none;
+            padding: 0;
+            text-align: left;
+            max-width: 200px;
+        }
+        .layer-list li {
+            margin: 5px 0;
+            background: #333;
+            padding: 5px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+        }
+        .layer-list button {
+            background: #555;
+            color: white;
+            border: none;
+            padding: 2px 5px;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        .layer-list button:hover {
+            background: #777;
+        }
+        .blend-select, .opacity-slider {
+            margin-top: 5px;
+        }
+    </style>
 </head>
 <body>
-  <!-- Icono del menú -->
-  <div id="menuIcon">☰</div>
+    <h1>Web Mapping Tool</h1>
+    <canvas id="mappingCanvas" width="800" height="600"></canvas>
+    <div class="controls">
+        <input type="file" id="upload" accept="video/*,image/*">
+        <button id="reset">Reset</button>
+        <br>
+        <label for="scale">Scale:</label>
+        <input type="range" id="scale" min="0.5" max="2" step="0.1" value="1">
+        <br>
+        <label for="rotation">Rotate:</label>
+        <input type="range" id="rotation" min="0" max="360" step="1" value="0">
+        <br>
+        <button id="addLayer">Add Layer</button>
+        <ul class="layer-list" id="layerList"></ul>
+    </div>
 
-  <!-- Menú -->
-  <div id="menu">
-    <input type="file" id="videoInput" accept="video/*">
-    <button id="nodeCountButton">Set Nodos</button>
-    <button id="addNodeButton">Agregar Nodo</button>
-    <button id="deleteNodeButton">Eliminar Nodo</button>
-    <button id="playPauseButton">Play</button>
-    <button id="resetButton">Resetear Máscara</button>
-    <button id="fullScreenButton">Pantalla Completa</button>
-  </div>
+    <script>
+        const canvas = document.getElementById('mappingCanvas');
+        const ctx = canvas.getContext('2d');
+        const upload = document.getElementById('upload');
+        const resetBtn = document.getElementById('reset');
+        const scaleInput = document.getElementById('scale');
+        const rotationInput = document.getElementById('rotation');
+        const addLayerBtn = document.getElementById('addLayer');
+        const layerList = document.getElementById('layerList');
 
-  <!-- Canvas -->
-  <canvas id="maskCanvas"></canvas>
+        let layers = [];
+        let activeLayer = null;
 
-  <script>
-    const maskCanvas = document.getElementById('maskCanvas');
-    const maskCtx = maskCanvas.getContext('2d');
-    const menuIcon = document.getElementById('menuIcon');
-    const menu = document.getElementById('menu');
-    const videoInput = document.getElementById('videoInput');
-    const nodeCountButton = document.getElementById('nodeCountButton');
-    const addNodeButton = document.getElementById('addNodeButton');
-    const deleteNodeButton = document.getElementById('deleteNodeButton');
-    const resetButton = document.getElementById('resetButton');
-    const playPauseButton = document.getElementById('playPauseButton');
-    const fullScreenButton = document.getElementById('fullScreenButton');
+        class Layer {
+            constructor(media, scale = 1, rotation = 0, blendMode = 'source-over', opacity = 1) {
+                this.media = media;
+                this.scale = scale;
+                this.rotation = rotation;
+                this.blendMode = blendMode;
+                this.opacity = opacity;
+            }
 
-    let maskPoints = [];
-    let selectedPoint = null;
-    let isDragging = false;
-    let video = null;
-    let isPlaying = false;
-    let externalWindow = null;
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+                ctx.globalCompositeOperation = this.blendMode;
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.scale(this.scale, this.scale);
+                ctx.rotate((this.rotation * Math.PI) / 180);
+                if (this.media.tagName === 'IMG') {
+                    ctx.drawImage(this.media, -this.media.width / 2, -this.media.height / 2);
+                } else if (this.media.tagName === 'VIDEO') {
+                    ctx.drawImage(this.media, -this.media.videoWidth / 2, -this.media.videoHeight / 2);
+                }
+                ctx.restore();
+            }
+        }
 
-    // Crear máscara inicial con n lados
-    function createPolygonVertices(n) {
-      const radius = Math.min(maskCanvas.width, maskCanvas.height) / 3;
-      const centerX = maskCanvas.width / 2;
-      const centerY = maskCanvas.height / 2;
-      const angleStep = (2 * Math.PI) / n;
-      const vertices = [];
+        function drawAllLayers() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            layers.forEach(layer => layer.draw());
+        }
 
-      for (let i = 0; i < n; i++) {
-        vertices.push({
-          x: centerX + radius * Math.cos(i * angleStep),
-          y: centerY + radius * Math.sin(i * angleStep),
+        upload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                let media;
+                if (file.type.startsWith('image/')) {
+                    media = new Image();
+                    media.onload = () => {
+                        addLayer(media);
+                    };
+                } else if (file.type.startsWith('video/')) {
+                    media = document.createElement('video');
+                    media.src = url;
+                    media.autoplay = true;
+                    media.loop = true;
+                    media.muted = true;
+                    media.onloadeddata = () => {
+                        addLayer(media);
+                    };
+                }
+                media.src = url;
+            }
         });
-      }
 
-      return vertices;
-    }
-
-    function setInitialMaskNodes(n = 4) {
-      maskPoints = createPolygonVertices(n);
-    }
-
-    // Redimensionar Canvas y Adaptar al Giro de Pantalla
-    function resizeCanvas() {
-      maskCanvas.width = window.innerWidth;
-      maskCanvas.height = window.innerHeight;
-      setInitialMaskNodes(maskPoints.length || 4);
-    }
-
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-
-    // Entrar en Pantalla Completa
-    function enterFullScreen() {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        document.documentElement.requestFullscreen();
-      }
-    }
-
-    fullScreenButton.addEventListener('click', enterFullScreen);
-
-    // Dibujar máscara y video
-    function drawMask() {
-      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-
-      if (video) {
-        maskCtx.save();
-        maskCtx.beginPath();
-        maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-        for (let i = 1; i < maskPoints.length; i++) {
-          maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
+        function addLayer(media) {
+            const layer = new Layer(media);
+            layers.push(layer);
+            activeLayer = layer;
+            updateLayerList();
+            drawAllLayers();
         }
-        maskCtx.closePath();
-        maskCtx.clip();
-        maskCtx.drawImage(video, 0, 0, maskCanvas.width, maskCanvas.height);
-        maskCtx.restore();
-      }
 
-      maskCtx.strokeStyle = 'white';
-      maskCtx.lineWidth = 2;
-      maskCtx.beginPath();
-      maskCtx.moveTo(maskPoints[0].x, maskPoints[0].y);
-      for (let i = 1; i < maskPoints.length; i++) {
-        maskCtx.lineTo(maskPoints[i].x, maskPoints[i].y);
-      }
-      maskCtx.closePath();
-      maskCtx.stroke();
+        function updateLayerList() {
+            layerList.innerHTML = '';
+            layers.forEach((layer, index) => {
+                const li = document.createElement('li');
+                li.textContent = `Layer ${index + 1}`;
+                
+                const blendSelect = document.createElement('select');
+                blendSelect.className = 'blend-select';
+                ['source-over', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'].forEach(mode => {
+                    const option = document.createElement('option');
+                    option.value = mode;
+                    option.textContent = mode;
+                    if (layer.blendMode === mode) option.selected = true;
+                    blendSelect.appendChild(option);
+                });
+                blendSelect.addEventListener('change', (e) => {
+                    layer.blendMode = e.target.value;
+                    drawAllLayers();
+                });
 
-      maskPoints.forEach(p => {
-        maskCtx.fillStyle = p === selectedPoint ? 'red' : 'white';
-        const size = p === selectedPoint ? 10 : 6;
-        maskCtx.beginPath();
-        maskCtx.arc(p.x, p.y, size, 0, Math.PI * 2);
-        maskCtx.fill();
-      });
+                const opacitySlider = document.createElement('input');
+                opacitySlider.type = 'range';
+                opacitySlider.min = 0;
+                opacitySlider.max = 1;
+                opacitySlider.step = 0.1;
+                opacitySlider.value = layer.opacity;
+                opacitySlider.className = 'opacity-slider';
+                opacitySlider.addEventListener('input', (e) => {
+                    layer.opacity = parseFloat(e.target.value);
+                    drawAllLayers();
+                });
 
-      requestAnimationFrame(drawMask);
-    }
-
-    nodeCountButton.addEventListener('click', () => {
-      const nodeCount = parseInt(prompt("¿Cuántos nodos quieres?", maskPoints.length || 4));
-      if (nodeCount > 2) {
-        setInitialMaskNodes(nodeCount);
-      } else {
-        alert("El número de nodos debe ser mayor a 2.");
-      }
-    });
-
-    // Eventos de Nodos
-    maskCanvas.addEventListener('mousedown', (e) => {
-      const { offsetX, offsetY } = e;
-      selectedPoint = maskPoints.find(p => Math.hypot(p.x - offsetX, p.y - offsetY) < 10);
-      isDragging = !!selectedPoint;
-    });
-
-    maskCanvas.addEventListener('mousemove', (e) => {
-      if (isDragging && selectedPoint) {
-        selectedPoint.x = e.offsetX;
-        selectedPoint.y = e.offsetY;
-      }
-    });
-
-    maskCanvas.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
-
-    maskCanvas.addEventListener('touchstart', (e) => {
-      const touch = e.touches[0];
-      const offsetX = touch.clientX, offsetY = touch.clientY;
-      selectedPoint = maskPoints.find(p => Math.hypot(p.x - offsetX, p.y - offsetY) < 10);
-      isDragging = !!selectedPoint;
-    });
-
-    maskCanvas.addEventListener('touchmove', (e) => {
-      if (isDragging && selectedPoint) {
-        const touch = e.touches[0];
-        selectedPoint.x = touch.clientX;
-        selectedPoint.y = touch.clientY;
-      }
-    });
-
-    maskCanvas.addEventListener('touchend', () => {
-      isDragging = false;
-    });
-
-    // Cargar Video Local
-    videoInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        video = document.createElement('video');
-        video.src = URL.createObjectURL(file);
-        video.loop = true;
-        video.muted = true;
-        video.play();
-        isPlaying = true;
-      }
-    });
-
-    // Botones de Interacción
-    addNodeButton.addEventListener('click', () => {
-      maskPoints.push({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    });
-
-    deleteNodeButton.addEventListener('click', () => {
-      if (selectedPoint) {
-        maskPoints = maskPoints.filter(p => p !== selectedPoint);
-        selectedPoint = null;
-      }
-    });
-
-    playPauseButton.addEventListener('click', () => {
-      if (video) {
-        if (isPlaying) {
-          video.pause();
-          playPauseButton.textContent = 'Play';
-        } else {
-          video.play();
-          playPauseButton.textContent = 'Pause';
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.addEventListener('click', () => {
+                    layers.splice(index, 1);
+                    updateLayerList();
+                    drawAllLayers();
+                });
+                
+                li.appendChild(blendSelect);
+                li.appendChild(opacitySlider);
+                li.appendChild(deleteBtn);
+                layerList.appendChild(li);
+            });
         }
-        isPlaying = !isPlaying;
-      }
-    });
 
-    resetButton.addEventListener('click', () => {
-      setInitialMaskNodes(maskPoints.length || 4);
-      selectedPoint = null;
-    });
+        resetBtn.addEventListener('click', () => {
+            layers = [];
+            activeLayer = null;
+            scaleInput.value = 1;
+            rotationInput.value = 0;
+            updateLayerList();
+            drawAllLayers();
+        });
 
-    drawMask();
-  </script>
+        scaleInput.addEventListener('input', (event) => {
+            if (activeLayer) {
+                activeLayer.scale = parseFloat(event.target.value);
+                drawAllLayers();
+            }
+        });
+
+        rotationInput.addEventListener('input', (event) => {
+            if (activeLayer) {
+                activeLayer.rotation = parseFloat(event.target.value);
+                drawAllLayers();
+            }
+        });
+
+        addLayerBtn.addEventListener('click', () => {
+            if (activeLayer) {
+                layers.push(new Layer(activeLayer.media, activeLayer.scale, activeLayer.rotation));
+                updateLayerList();
+                drawAllLayers();
+            }
+        });
+
+        function animate() {
+            drawAllLayers();
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
 </body>
 </html>
-
