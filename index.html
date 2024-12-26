@@ -19,6 +19,7 @@
         canvas {
             border: 1px solid #fff;
             background-color: #000;
+            cursor: crosshair;
         }
         .controls {
             margin-top: 20px;
@@ -88,12 +89,13 @@
         let activeLayer = null;
 
         class Layer {
-            constructor(media, scale = 1, rotation = 0, blendMode = 'source-over', opacity = 1) {
+            constructor(media, scale = 1, rotation = 0, blendMode = 'source-over', opacity = 1, nodes = []) {
                 this.media = media;
                 this.scale = scale;
                 this.rotation = rotation;
                 this.blendMode = blendMode;
                 this.opacity = opacity;
+                this.nodes = nodes; // Array of nodes for custom shapes
             }
 
             draw() {
@@ -103,6 +105,15 @@
                 ctx.translate(canvas.width / 2, canvas.height / 2);
                 ctx.scale(this.scale, this.scale);
                 ctx.rotate((this.rotation * Math.PI) / 180);
+                
+                if (this.nodes.length > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.nodes[0].x, this.nodes[0].y);
+                    this.nodes.forEach(node => ctx.lineTo(node.x, node.y));
+                    ctx.closePath();
+                    ctx.clip();
+                }
+
                 if (this.media.tagName === 'IMG') {
                     ctx.drawImage(this.media, -this.media.width / 2, -this.media.height / 2);
                 } else if (this.media.tagName === 'VIDEO') {
@@ -110,12 +121,30 @@
                 }
                 ctx.restore();
             }
+
+            addNode(x, y) {
+                this.nodes.push({ x, y });
+            }
+
+            clearNodes() {
+                this.nodes = [];
+            }
         }
 
         function drawAllLayers() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             layers.forEach(layer => layer.draw());
         }
+
+        canvas.addEventListener('click', (e) => {
+            if (activeLayer) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left - canvas.width / 2;
+                const y = e.clientY - rect.top - canvas.height / 2;
+                activeLayer.addNode(x, y);
+                drawAllLayers();
+            }
+        });
 
         upload.addEventListener('change', (event) => {
             const file = event.target.files[0];
@@ -181,6 +210,13 @@
                     drawAllLayers();
                 });
 
+                const clearNodesBtn = document.createElement('button');
+                clearNodesBtn.textContent = 'Clear Nodes';
+                clearNodesBtn.addEventListener('click', () => {
+                    layer.clearNodes();
+                    drawAllLayers();
+                });
+
                 const deleteBtn = document.createElement('button');
                 deleteBtn.textContent = 'Delete';
                 deleteBtn.addEventListener('click', () => {
@@ -191,6 +227,7 @@
                 
                 li.appendChild(blendSelect);
                 li.appendChild(opacitySlider);
+                li.appendChild(clearNodesBtn);
                 li.appendChild(deleteBtn);
                 layerList.appendChild(li);
             });
